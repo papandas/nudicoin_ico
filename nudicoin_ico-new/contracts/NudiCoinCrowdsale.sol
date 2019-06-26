@@ -1,29 +1,54 @@
 pragma solidity ^0.5.0;
 
-import "openzeppelin-solidity/contracts/crowdsale/Crowdsale.sol";
-import "openzeppelin-solidity/contracts/crowdsale/emission/MintedCrowdsale.sol";
 import "openzeppelin-solidity/contracts/crowdsale/validation/CappedCrowdsale.sol";
+import "openzeppelin-solidity/contracts/crowdsale/distribution/RefundableCrowdsale.sol";
+import "openzeppelin-solidity/contracts/crowdsale/emission/MintedCrowdsale.sol";
+import "openzeppelin-solidity/contracts/token/ERC20/ERC20Mintable.sol";
+import "openzeppelin-solidity/contracts/token/ERC20/ERC20Detailed.sol";
 
-contract NudiCoinCrowdsale is Crowdsale, MintedCrowdsale, CappedCrowdsale{
-
-  uint256 public investorMinCap = 2000000000000000;
-  uint256 public investorHardCap = 50000000000000000000;
-  mapping(address => uint256) public contributions;
-
-  constructor(uint256 _rate, address payable _wallet, ERC20 _token, uint256 _cap) 
-    Crowdsale(_rate, _wallet, _token) 
-    CappedCrowdsale(_cap)
-    public 
-  {
-    
-  }
-
-  /*function _preValidatePurchase(address _beneficiary, uint256 _weiAmount) internal {
-    super._preValidatePurchase(_beneficiary, _weiAmount);
-    uint256 _existingContribution = contributions[_beneficiary];
-    uint256 _newContribution = _existingContribution.add(_weiAmount);
-    require(_newContribution >= investorMinCap && _newContribution <= investorMinCap);
-    contributions[_beneficiary] = _newContribution;
-  }*/
-
+/**
+ * @title NudiCoinCrowdsaleToken
+ * @dev Very simple ERC20 Token that can be minted.
+ * It is meant to be used in a crowdsale contract.
+ 
+contract NudiCoinCrowdsaleToken is ERC20Mintable, ERC20Detailed {
+    constructor () public ERC20Detailed("Nudi Coin", "NUDI", 18) {
+        // solhint-disable-previous-line no-empty-blocks
+    }
 }
+*/
+/**
+ * @title NudiCoinCrowdsale
+ * @dev This is an example of a fully fledged crowdsale.
+ * The way to add new features to a base crowdsale is by multiple inheritance.
+ * In this example we are providing following extensions:
+ * CappedCrowdsale - sets a max boundary for raised funds
+ * RefundableCrowdsale - set a min goal to be reached and returns funds if it's not met
+ * MintedCrowdsale - assumes the token can be minted by the crowdsale, which does so
+ * when receiving purchases.
+ *
+ * After adding multiple features it's good practice to run integration tests
+ * to ensure that subcontracts works together as intended.
+ */
+contract NudiCoinCrowdsale is CappedCrowdsale, RefundableCrowdsale, MintedCrowdsale {
+    constructor (
+        uint256 openingTime,
+        uint256 closingTime,
+        uint256 rate,
+        address payable wallet,
+        uint256 cap,
+        ERC20Mintable token,
+        uint256 goal
+    )
+        public
+        Crowdsale(rate, wallet, token)
+        CappedCrowdsale(cap)
+        TimedCrowdsale(openingTime, closingTime)
+        RefundableCrowdsale(goal)
+    {
+        //As goal needs to be met for a successful crowdsale
+        //the value needs to less or equal than a cap which is limit for accepted funds
+        require(goal <= cap, "NudiCoinCrowdSale: goal is greater than cap");
+    }
+}
+

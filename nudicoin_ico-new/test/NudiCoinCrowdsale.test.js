@@ -1,5 +1,7 @@
 import ether from './helpers/ether';
-import EVMRevert from './helpers/EVMRevert';
+const BN = web3.utils.BN;
+import time from './helpers/time';
+//const { BN, balance, ether, expectRevert, time } = require('openzeppelin-test-helpers');
 
 const BigNumber = web3.utils.BN;
 
@@ -8,101 +10,143 @@ require('chai')
   .use(require('chai-bignumber')(BigNumber))
   .should();
 
-const NudiCoin = artifacts.require('./NudiCoin.sol');
-const NudiCoinCrowdsale = artifacts.require("./NudiCoinCrowdsale.sol");
+const SampleCrowdsale = artifacts.require('./NudiCoinCrowdsale.sol');
+const SampleCrowdsaleToken = artifacts.require('./NudiCoin.sol');
 
-contract('NudiCoinCrowdsale', function([_, wallet, investor1, investor2, foundersFund, foundationFund, partnersFund]){
-    
-  const _name = 'Nudi Coin';
-  const _symbol = 'NUDI';
+contract('SampleCrowdsale', function ([_, deployer, owner, wallet, investor]) {
+  const RATE = new BN(10);
+  const GOAL = ether('10');
+  const CAP = ether('20');
+
+  const _name = "Nudi Coin";
+  const _symbol = "NUDI";
   const _decimals = 18;
 
-  const _rate = 500;
-  const _wallet = wallet;
-  const _cap = ether(100);
-  const _investorMinCap = ether(0.02);
-
-  //var this.token;
-  //var this.crowdsale;
+  before(async function () {
+    // Advance to the next block to correctly read time in the solidity "now" function interpreted by ganache
+    await time.advanceBlock();
+  });
 
   beforeEach(async function () {
+    //console.log("Init - beforEach")
+    this.openingTime = (await time.latest()).add(time.duration.weeks(1));
+    console.log("This Openning Time", new Date(new BN(this.openingTime).toString()).toLocaleString());
 
-    this.token = await NudiCoin.new(_name, _symbol, _decimals);
-    
-    this.crowdsale = await NudiCoinCrowdsale.new(_rate, _wallet, this.token.address, _cap);
+    this.closingTime = this.openingTime.add(time.duration.years(1));
+    console.log("This Closing time", new BN(this.closingTime).toString())
 
-    // Pause Token
-    //await this.token.pause();
+    this.afterClosingTime = this.closingTime.add(time.duration.seconds(1));
+    console.log("This afterClosing Time", new BN(this.afterClosingTime).toString())
 
-    // Transfer token ownership to crowdsale
-    //await this.token.transferOwnership(this.crowdsale.address);
+    this.token = await SampleCrowdsaleToken.new(_name, _symbol, _decimals, { from: deployer });
+    //console.log("Token", this.token.address);
+    this.crowdsale = await SampleCrowdsale.new(
+      this.openingTime, this.closingTime, RATE, wallet, CAP, this.token.address, GOAL,
+      { from: owner }
+    );
+    //console.log("This Crowdsale", this.crowdsale.address)
 
-    // let owners = await this.token.owner();
-    //console.log("Owner", owners)
+    await this.token.addMinter(this.crowdsale.address, { from: deployer });
+    //console.log("Adding minter")
+    await this.token.renounceMinter({ from: deployer });
+    //console.log("Renounce Minter")
   });
 
-  describe('crowdsale', function() {
-    it('tracks the rate', async function() {
-      const rate = await this.crowdsale.rate();
-      const rateToNum = rate.toNumber()
-      rateToNum.should.equal(_rate);
-    });
+  it('should create crowdsale with correct parameters', async function () {
+    //console.log("Init - correct param")
+    const _openingTime = await this.crowdsale.openingTime();
+    (_openingTime.toNumber()).should.equal(this.openingTime.toNumber());
 
-    it('tracks the wallet', async function() {
-      const wallet = await this.crowdsale.wallet();
-      wallet.should.equal(_wallet);
-    });
+    //console.log("This Closing time", this.closingTime)
+    const _closingTime = await this.crowdsale.closingTime();
+    (_closingTime.toNumber()).should.equal(this.closingTime.toNumber());
 
-    it('tracks the token', async function() {
-      const token = await this.crowdsale.token();
-      token.should.equal(this.token.address);
-    });
+    //console.log("RATE", RATE)
+    const _RATE = await this.crowdsale.rate();
+    (_RATE.toNumber()).should.equal(RATE.toNumber());
+
+    //console.log("Wallet", wallet)
+    (await this.crowdsale.wallet()).should.be.equal(wallet);
+
+    console.log("GOAL", new BN(GOAL).toString())
+    const _GOAL = await this.crowdsale.goal();
+    console.log("_GOAL", new BN(_GOAL).toString())
+    //(_GOAL.toNumber()).should.equal(GOAL.toNumber());
+
+    console.log("CAP", new BN(CAP).toString())
+    const _CAP = await this.crowdsale.cap();
+    console.log("_CAP", new BN(_CAP).toString())
+    //(_CAP.toNumber()).should.equal(CAP.toNumber());
   });
 
-
-  /*describe('minted crowdsale', function() {
-    it('mints tokens after purchase', async function() {
-      const originalTotalSupply = await this.token.totalSupply();
-      await this.crowdsale.sendTransaction({ value: ether(1), from: investor1 });
-      const newTotalSupply = await this.token.totalSupply();
-      assert.isTrue(newTotalSupply > originalTotalSupply);
-    });
-  });
-
-  describe('capped crowdsale', async function() {
-    it('has the correct hard cap', async function() {
-      const cap = await this.crowdsale.cap();
-      cap.should.be.bignumber.equal(_cap);
-    });
-  });
-
-  describe('accepting payments', function() {
-    it('should accept payments', async function() {
-      const value = ether(1)
-      const purchaser = investor2;
-      ///await this.crowdsale.sendTransaction({ value: value, from: investor1 }).then((reply)=>{console.log(reply)});
-      await this.crowdsale.buyTokens(investor1, { value: value, from: purchaser }).should.be.fulfilled;
-    });
-  });
-
-  describe('buyTokens()', function() {
-    describe('when the contribution is less than the minimum cap', function() {
-      it('rejects the transaction', async function() {
-        const value = _investorMinCap - 1;
-        await this.crowdsale.buyTokens(investor2, { value: value, from: investor2 }).should.be.rejectedWith('revert');
-      });
-    });
-
-    describe('when the investor has already met the minimum cap', function() {
-      it('allows the investor to contribute below the minimum cap', async function() {
-        // First contribution is valid
-        const value1 = web3.toWei('1', 'ether');
-        await this.crowdsale.buyTokens(investor1, { value: value1, from: investor1 });
-        // Second contribution is less than investor cap
-        const value2 = 1; // wei
-        await this.crowdsale.buyTokens(investor1, { value: value2, from: investor1 }).should.be.fulfilled;
-      });
-    });
+  /*it('should not accept payments before start', async function () {
+    await expectRevert(this.crowdsale.send(ether('1')), 'TimedCrowdsale: not open');
+    await expectRevert(this.crowdsale.buyTokens(investor, { from: investor, value: ether('1') }),
+      'TimedCrowdsale: not open'
+    );
   });*/
 
-})
+  it('should accept payments during the sale', async function () {
+    const investmentAmount = ether('1');
+    const expectedTokenAmount = RATE.mul(investmentAmount);
+    
+    //await time.increaseTo(this.openingTime);
+    await this.crowdsale.buyTokens(investor, { value: investmentAmount, from: investor });
+
+    const balanceOf = await this.token.balanceOf(investor);
+    console.log("balanceOf", new BN(balanceOf).toString(), ", Expected Token Aount", new BN(expectedTokenAmount).toString())
+    (new BN(balanceOf).toString()).should.equal(new BN(expectedTokenAmount).toString());
+
+    const totalSupply = await this.token.totalSupply()
+    console.log("totalSupply", new BN(totalSupply).toString(), ", Inventment", new BN(investmentAmount).toString())
+    (new BN(totalSupply).toString()).should.equal(new BN(investmentAmount).toString());
+  });
+
+  /*it('should reject payments after end', async function () {
+    await time.increaseTo(this.afterClosingTime);
+    await expectRevert(this.crowdsale.send(ether('1')), 'TimedCrowdsale: not open');
+    await expectRevert(this.crowdsale.buyTokens(investor, { value: ether('1'), from: investor }),
+      'TimedCrowdsale: not open'
+    );
+  });
+
+  it('should reject payments over cap', async function () {
+    await time.increaseTo(this.openingTime);
+    await this.crowdsale.send(CAP);
+    await expectRevert(this.crowdsale.send(1), 'CappedCrowdsale: cap exceeded');
+  });
+
+  it('should allow finalization and transfer funds to wallet if the goal is reached', async function () {
+    await time.increaseTo(this.openingTime);
+    await this.crowdsale.send(GOAL);
+
+    const balanceTracker = await balance.tracker(wallet);
+    await time.increaseTo(this.afterClosingTime);
+    await this.crowdsale.finalize({ from: owner });
+    (await balanceTracker.delta()).should.be.bignumber.equal(GOAL);
+  });
+
+  it('should allow refunds if the goal is not reached', async function () {
+    const balanceTracker = await balance.tracker(investor);
+
+    await time.increaseTo(this.openingTime);
+    await this.crowdsale.sendTransaction({ value: ether('1'), from: investor, gasPrice: 0 });
+    await time.increaseTo(this.afterClosingTime);
+
+    await this.crowdsale.finalize({ from: owner });
+    await this.crowdsale.claimRefund(investor, { gasPrice: 0 });
+
+    (await balanceTracker.delta()).should.be.bignumber.equal('0');
+  });*/
+
+  /*describe('when goal > cap', function () {
+    // goal > cap
+    const HIGH_GOAL = ether('30');
+
+    it('creation reverts', async function () {
+      await expectRevert(SampleCrowdsale.new(
+        this.openingTime, this.closingTime, RATE, wallet, CAP, this.token.address, HIGH_GOAL
+      ), 'SampleCrowdSale: goal is greater than cap');
+    });
+  });*/
+});

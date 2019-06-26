@@ -1,13 +1,14 @@
 {
-  "name": "ico-irl",
+  "name": "nudicoin-ico",
   "version": "1.0.0",
-  "description": "Real World ICO",
+  "description": "Nudi Coin ICO",
   "main": "truffle.js",
   "directories": {
     "test": "test"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "lite-server"
   },
   "author": "",
   "license": "ISC",
@@ -31,7 +32,9 @@
     "ethereumjs-util": "^5.2.0",
     "ethjs-abi": "^0.2.1",
     "ganache-cli": "6.1.0",
+    "lite-server": "^2.5.3",
     "openzeppelin-solidity": "^2.3.0",
+    "openzeppelin-test-helpers": "^0.4",
     "solidity-coverage": "^0.5.4",
     "solium": "^1.1.7",
     "truffle": "4.1.11",
